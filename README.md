@@ -202,6 +202,8 @@ panel, create an empty file named `panel-rev6` on the FAT boot partition.
 
 - [`rgpad`](https://github.com/GregoryPletnev/rg-pad): the gamepad to
   keyboard/mouse daemon installed by the rootfs script.
+- [`dn`](https://github.com/GregoryPletnev/dn): the TUI file manager built in
+  the same Free Pascal arm64 chroot as `rgpad`.
 
 ## Notes and limits
 
