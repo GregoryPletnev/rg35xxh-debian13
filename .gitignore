@@ -1,0 +1,22 @@
+# Build artifacts and images
+*.img
+*.img.gz
+*.img.zip
+*.img.zst
+*.bin
+*.log
+boot.scr
+out/
+work/
+
+# Free Pascal
+*.o
+*.ppu
+*.compiled
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

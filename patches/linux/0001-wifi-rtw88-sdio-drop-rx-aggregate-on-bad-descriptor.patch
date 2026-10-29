@@ -1,0 +1,45 @@
+From: rg35xxh-os
+Subject: [PATCH] wifi: rtw88: sdio: drop the RX aggregate on a bad descriptor
+
+rtw_sdio_rxfifo_recv() takes pkt_len from each RX descriptor of an
+aggregate and trusts it.  On RTL8821CS (8051 WCPU) the RX buffer can be
+read while HW/FW are still filling it (see the comment in
+rtw_sdio_rx_isr()), so a descriptor may carry pkt_len 0 or a length past
+the end of the data read from the card.  The first case hits
+WARN_ON(1) in ieee80211_rx_monitor() (net/mac80211/rx.c), the second one
+skb_over_panic() -> BUG() in ksdioirqd, which kills the SDIO IRQ thread
+and with it Wi-Fi until reboot (RG35XX-H, 7.1.2):
+
+  skb_over_panic: ... len:1068 put:1068 ... end:0x180
+  kernel BUG at net/core/skbuff.c:214!
+   rtw_sdio_rx_skb+0xd0/0xf8
+   rtw_sdio_rxfifo_recv+0x234/0x2b4
+
+The whole aggregate was already read from the card, so dropping the rest
+of it keeps the FIFO in sync and costs only the frames in that buffer.
+
+---
+ drivers/net/wireless/realtek/rtw88/sdio.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+--- a/drivers/net/wireless/realtek/rtw88/sdio.c
++++ b/drivers/net/wireless/realtek/rtw88/sdio.c
+@@ -999,6 +999,18 @@
+ 		pkt_offset = pkt_desc_sz + pkt_stat.drv_info_sz +
+ 			     pkt_stat.shift;
+
++		/* A descriptor read before HW/FW finished the buffer can
++		 * hold any length: never put more than was read, and never
++		 * hand mac80211 a frame shorter than its FCS.
++		 */
++		if (unlikely(pkt_offset + pkt_stat.pkt_len > rx_len ||
++			     (!pkt_stat.is_c2h && pkt_stat.pkt_len <= FCS_LEN))) {
++			dev_warn_ratelimited(rtwdev->dev,
++					     "bad RX descriptor (pkt_len %u, offset %u, left %u), dropping\n",
++					     pkt_stat.pkt_len, pkt_offset, rx_len);
++			dev_kfree_skb_any(skb);
++			break;
++		}
+ 		curr_pkt_len = ALIGN(pkt_offset + pkt_stat.pkt_len,
+ 				     RTW_SDIO_DATA_PTR_ALIGN);
+
